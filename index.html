@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LinkChain — on-chain URL shortener on BOT Chain</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=VT323&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.13.2/ethers.umd.min.js"></script>
+<style>
+  :root {
+    --bg: #0F1729;
+    --panel: #1A2540;
+    --panel-border: #3A4F7A;
+    --green: #3EFF6A;
+    --yellow: #FFE93E;
+    --pink: #FF4B6E;
+    --cyan: #3EDCFF;
+    --text: #EAF0FF;
+    --muted: #7488B5;
+  }
+  * { box-sizing: border-box; border-radius: 0 !important; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    background-image: repeating-linear-gradient(0deg, rgba(255,255,255,0.025) 0px, rgba(255,255,255,0.025) 1px, transparent 1px, transparent 3px);
+    color: var(--text);
+    font-family: 'VT323', monospace;
+    font-size: 18px;
+    min-height: 100vh;
+    padding: 40px 16px 90px;
+  }
+  .wrap { max-width: 620px; margin: 0 auto; }
+
+  header { text-align: center; margin-bottom: 10px; }
+  h1 {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 22px;
+    margin: 0;
+    color: var(--green);
+    text-shadow: 3px 3px 0 #0A2E1A;
+  }
+  header p { color: var(--muted); font-size: 16px; margin: 12px 0 0; }
+
+  .tabs { display: flex; gap: 6px; margin: 24px 0 20px; }
+  .tab {
+    flex: 1;
+    text-align: center;
+    padding: 10px;
+    cursor: pointer;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    color: var(--muted);
+    background: var(--panel);
+    border: 3px solid var(--panel-border);
+    box-shadow: 4px 4px 0 #060B16;
+  }
+  .tab.active { background: var(--green); color: #06170D; border-color: #06170D; }
+
+  .panel {
+    background: var(--panel);
+    border: 3px solid var(--panel-border);
+    padding: 22px;
+    margin-bottom: 18px;
+    box-shadow: 6px 6px 0 #060B16;
+  }
+  .panel h3 { font-family: 'Press Start 2P', monospace; font-size: 12px; margin: 0 0 8px; color: var(--cyan); }
+  .panel .sub { color: var(--muted); font-size: 15px; margin-bottom: 16px; }
+
+  label { display: block; font-size: 13px; color: var(--muted); margin: 14px 0 5px; text-transform: uppercase; letter-spacing: 0.04em; }
+  label:first-child { margin-top: 0; }
+
+  .urlbar {
+    display: flex;
+    align-items: center;
+    background: #0A0F1D;
+    border: 3px solid var(--panel-border);
+    padding: 4px 4px 4px 14px;
+  }
+  .urlbar:focus-within { border-color: var(--cyan); }
+  .urlbar .scheme { font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: var(--muted); white-space: nowrap; }
+  .urlbar input {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px;
+    padding: 10px 6px;
+    outline: none;
+    color: var(--text);
+  }
+  .urlbar .go {
+    background: var(--cyan);
+    color: #06202B;
+    border: none;
+    padding: 9px 16px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    cursor: pointer;
+    white-space: nowrap;
+  }
+
+  input.plain {
+    width: 100%;
+    background: #0A0F1D;
+    border: 3px solid var(--panel-border);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px;
+    padding: 10px 12px;
+    outline: none;
+  }
+  input.plain:focus { border-color: var(--cyan); }
+
+  .fee-note { font-size: 14px; color: var(--yellow); margin-top: 10px; }
+
+  button.primary {
+    margin-top: 16px;
+    width: 100%;
+    background: var(--green);
+    color: #06170D;
+    border: 3px solid #06170D;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 11px;
+    padding: 13px;
+    cursor: pointer;
+    box-shadow: 4px 4px 0 #060B16;
+  }
+  button.primary:active { transform: translate(4px, 4px); box-shadow: none; }
+
+  .status { margin-top: 12px; text-align: center; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--muted); }
+  .status.ok { color: var(--green); }
+  .status.err { color: var(--pink); }
+
+  .lookup-row { display: flex; gap: 8px; }
+  .lookup-row input.plain { flex: 1; }
+  .lookup-row button { width: auto; padding: 0 16px; margin-top: 0; }
+
+  .lc-row { display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin-bottom: 8px; background: #0A0F1D; border: 3px solid var(--panel-border); }
+  .lc-rank { font-family: 'Press Start 2P', monospace; font-size: 10px; color: var(--muted); width: 30px; }
+  .lc-info { flex: 1; min-width: 0; }
+  .lc-slug { font-family: 'IBM Plex Mono', monospace; font-size: 14px; color: var(--cyan); }
+  .lc-target { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .lc-boost-count { font-family: 'Press Start 2P', monospace; font-size: 11px; color: var(--yellow); }
+  .lc-boost-btn {
+    background: var(--pink);
+    color: #2B0611;
+    border: 2px solid #2B0611;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    padding: 8px 10px;
+    cursor: pointer;
+    box-shadow: 3px 3px 0 #060B16;
+  }
+  .lc-boost-btn:active { transform: translate(3px, 3px); box-shadow: none; }
+
+  .empty { text-align: center; color: var(--muted); font-size: 15px; padding: 30px 0; }
+  footer { margin-top: 30px; text-align: center; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>&gt; LINKCHAIN_</h1>
+    <p>Register a short link on-chain. Boost the ones you love.</p>
+  </header>
+
+  <div class="tabs">
+    <div class="tab active" data-tab="register">REGISTER</div>
+    <div class="tab" data-tab="trending">TRENDING</div>
+  </div>
+
+  <div id="registerView">
+    <div class="panel">
+      <h3>CLAIM YOUR SLUG</h3>
+      <div class="sub">First-come, first-served — like a domain name.</div>
+
+      <label for="slugInput">Your short link</label>
+      <div class="urlbar">
+        <span class="scheme">bot://</span>
+        <input type="text" id="slugInput" placeholder="my-link" />
+      </div>
+
+      <label for="targetInput">Destination URL</label>
+      <input type="text" class="plain" id="targetInput" placeholder="https://example.com/your-actual-page" />
+
+      <div class="fee-note" id="regFeeNote">Registration fee: —</div>
+      <button class="primary" id="registerBtn">REGISTER</button>
+      <div class="status" id="registerStatus"></div>
+    </div>
+
+    <div class="panel">
+      <h3>LOOK UP A LINK</h3>
+      <div class="lookup-row">
+        <input type="text" class="plain" id="lookupSlugInput" placeholder="slug" />
+        <button class="primary" id="lookupBtn">GO</button>
+      </div>
+      <div id="lookupResult"></div>
+    </div>
+  </div>
+
+  <div id="trendingView" style="display:none;">
+    <div class="panel">
+      <h3>TRENDING LINKS</h3>
+      <div class="sub">Sorted by boost count.</div>
+      <div id="trendingList"><div class="empty">Connect your wallet to load links.</div></div>
+    </div>
+  </div>
+
+  <footer>contract: <span id="contractAddr">not yet deployed — set CONTRACT_ADDRESS below</span></footer>
+</div>
+
+<script>
+  // ---- CONFIG: fill this in after you deploy LinkChain ----
+  const CONTRACT_ADDRESS = "0xDDcFc0784A46cd743eAc84A82495f2ef8468d815";
+  const BOT_NETWORK = {
+  chainId: "0x2A5", // 677 = mainnet
+  chainName: "BOT Chain",
+  nativeCurrency: { name: "BOT", symbol: "BOT", decimals: 18 },
+  rpcUrls: ["https://rpc.botchain.ai"],
+  blockExplorerUrls: ["https://scan.botchain.ai/"],
+};
+  const ABI = [
+    "function registerSlug(string slug, string targetURL) external payable",
+    "function boostLink(string slug) external payable",
+    "function updateTargetURL(string slug, string newTargetURL) external",
+    "function getSlug(string slug) external view returns (tuple(address owner, string targetURL, uint256 boostCount, uint256 registeredAt))",
+    "function isRegistered(string slug) external view returns (bool)",
+    "function slugCount() external view returns (uint256)",
+    "function getSlugAt(uint256 index) external view returns (string)",
+    "function registrationFee() external view returns (uint256)",
+    "function boostFee() external view returns (uint256)",
+  ];
+  // -----------------------------------------------------------------
+
+  document.getElementById("contractAddr").textContent =
+    CONTRACT_ADDRESS.startsWith("PASTE") ? "not yet deployed — set CONTRACT_ADDRESS in index.html" : CONTRACT_ADDRESS;
+
+  let provider, signer, userAddress, contract;
+
+  document.querySelectorAll(".tab").forEach((tab) => {
+    tab.addEventListener("click", () => {
+      document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
+      tab.classList.add("active");
+      document.getElementById("registerView").style.display = tab.dataset.tab === "register" ? "block" : "none";
+      document.getElementById("trendingView").style.display = tab.dataset.tab === "trending" ? "block" : "none";
+      if (tab.dataset.tab === "trending") loadTrending();
+    });
+  });
+
+  function setStatus(elId, msg, type) {
+    const el = document.getElementById(elId);
+    el.textContent = msg;
+    el.className = "status" + (type ? " " + type : "");
+  }
+
+  async function ensureNetwork() {
+    const currentChainId = await window.ethereum.request({ method: "eth_chainId" });
+    if (currentChainId === BOT_NETWORK.chainId) return;
+    try {
+      await window.ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: BOT_NETWORK.chainId }] });
+    } catch (switchError) {
+      if (switchError.code === 4902) {
+        await window.ethereum.request({ method: "wallet_addEthereumChain", params: [BOT_NETWORK] });
+      } else {
+        throw switchError;
+      }
+    }
+  }
+
+  async function connect() {
+    if (!window.ethereum) throw new Error("No wallet found — install MetaMask");
+    if (CONTRACT_ADDRESS.startsWith("PASTE")) throw new Error("Set CONTRACT_ADDRESS in index.html first");
+    await window.ethereum.request({ method: "eth_requestAccounts" });
+    await ensureNetwork();
+    provider = new ethers.BrowserProvider(window.ethereum);
+    signer = await provider.getSigner();
+    userAddress = await signer.getAddress();
+    contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+    await loadFeeNote();
+  }
+
+  async function loadFeeNote() {
+    try {
+      const fee = await contract.registrationFee();
+      document.getElementById("regFeeNote").textContent = `Registration fee: ${ethers.formatEther(fee)} BOT`;
+    } catch (err) { /* ignore until connected */ }
+  }
+
+  document.getElementById("registerBtn").addEventListener("click", async () => {
+    try {
+      if (!signer) await connect();
+    } catch (err) { setStatus("registerStatus", err.message, "err"); return; }
+
+    const slug = document.getElementById("slugInput").value.trim();
+    const target = document.getElementById("targetInput").value.trim();
+    if (!slug || !target) { setStatus("registerStatus", "Fill in both fields", "err"); return; }
+
+    try {
+      const fee = await contract.registrationFee();
+      setStatus("registerStatus", "Registering...", "");
+      const tx = await contract.registerSlug(slug, target, { value: fee });
+      await tx.wait();
+      setStatus("registerStatus", `Registered: bot://${slug}`, "ok");
+    } catch (err) {
+      setStatus("registerStatus", err.reason || err.message || "Failed", "err");
+    }
+  });
+
+  document.getElementById("lookupBtn").addEventListener("click", async () => {
+    const slug = document.getElementById("lookupSlugInput").value.trim();
+    const target = document.getElementById("lookupResult");
+    if (!slug) return;
+    target.innerHTML = '<div class="empty">Looking up...</div>';
+    try {
+      const readProvider = provider || new ethers.BrowserProvider(window.ethereum || {});
+      const readContract = contract || new ethers.Contract(CONTRACT_ADDRESS, ABI, readProvider);
+      const registered = await readContract.isRegistered(slug);
+      if (!registered) { target.innerHTML = '<div class="empty">This slug is available — nobody has claimed it yet.</div>'; return; }
+
+      const s = await readContract.getSlug(slug);
+      target.innerHTML = `
+        <div class="lc-row">
+          <div class="lc-info">
+            <div class="lc-slug">bot://${slug}</div>
+            <div class="lc-target">${s.targetURL}</div>
+          </div>
+          <div class="lc-boost-count">⚡${s.boostCount}</div>
+        </div>
+      `;
+    } catch (err) {
+      console.error(err);
+      target.innerHTML = '<div class="empty">Could not look up that slug.</div>';
+    }
+  });
+
+  async function loadTrending() {
+    const target = document.getElementById("trendingList");
+    target.innerHTML = '<div class="empty">Loading...</div>';
+    try {
+      if (!contract) await connect();
+      const count = await contract.slugCount();
+      if (count === 0n) { target.innerHTML = '<div class="empty">No links registered yet — be the first!</div>'; return; }
+
+      const items = [];
+      for (let i = 0n; i < count; i++) {
+        const slug = await contract.getSlugAt(i);
+        const s = await contract.getSlug(slug);
+        items.push({ slug, targetURL: s.targetURL, boostCount: Number(s.boostCount) });
+      }
+      items.sort((a, b) => b.boostCount - a.boostCount);
+
+      target.innerHTML = items.slice(0, 25).map((item, i) => `
+        <div class="lc-row">
+          <div class="lc-rank">#${i + 1}</div>
+          <div class="lc-info">
+            <div class="lc-slug">bot://${item.slug}</div>
+            <div class="lc-target">${item.targetURL}</div>
+          </div>
+          <div class="lc-boost-count">⚡${item.boostCount}</div>
+          <button class="lc-boost-btn" data-boost="${item.slug}">BOOST</button>
+        </div>
+      `).join("");
+
+      target.querySelectorAll("[data-boost]").forEach((btn) =>
+        btn.addEventListener("click", async () => {
+          try {
+            const fee = await contract.boostFee();
+            const tx = await contract.boostLink(btn.dataset.boost, { value: fee });
+            await tx.wait();
+            loadTrending();
+          } catch (err) { alert(err.reason || err.message || "Boost failed"); }
+        })
+      );
+    } catch (err) {
+      console.error(err);
+      target.innerHTML = '<div class="empty">Could not load trending links.</div>';
+    }
+  }
+</script>
+</body>
+</html>
